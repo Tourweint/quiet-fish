@@ -1,215 +1,242 @@
 """
-自习安静养鱼神器
-声音越大，鱼跑得越多
+安静养鱼 - 自习神器
+主程序入口
 """
 
 import pygame
-import pyaudio
-import math
 import random
+import math
 import time
-from collections import deque
+from datetime import datetime
 
-# ============ 配置 ============
-WIDTH, HEIGHT = 800, 600
-FPS = 60
-BG_COLOR = (20, 30, 50)  # 深蓝色背景
-WATER_COLOR = (30, 60, 100)
-FISH_COLORS = [(255, 180, 50), (255, 100, 100), (100, 200, 255), (255, 150, 200)]
+# 导入配置
+from config import (
+    WIDTH, HEIGHT, FPS, BG_COLOR, WATER_TOP,
+    SILENCE_THRESHOLD, MAX_FISH, MIN_FISH,
+    POMODORO_WORK_MINUTES, POMODORO_BREAK_MINUTES,
+    ACHIEVEMENTS
+)
 
-# 声音阈值配置
-SILENCE_THRESHOLD = 500  # 安静阈值
-MAX_FISH = 20            # 最大鱼数
-MIN_FISH = 0             # 最小鱼数
-FISH_FLEE_SPEED = 2.0    # 鱼逃跑速度系数
-
-
-def get_font(size=36):
-    """获取支持中文的字体"""
-    # 尝试多个中文字体
-    font_paths = [
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/arphic/uming.ttc",
-        "/usr/share/fonts/truetype/arphic/ukai.ttc",
-    ]
-    for path in font_paths:
-        try:
-            return pygame.font.Font(path, size)
-        except:
-            continue
-    # 如果都找不到，回退到默认字体
-    return pygame.font.Font(None, size)
+# 导入模块
+from models.audio import AudioMonitor
+from models.fish import Fish
+from models.bubble import Bubble
+from models.stats import StatsManager
+from ui.font_manager import FontManager
+from ui.panel import UIPanel
 
 
-# ============ 音频处理 =========---
-class AudioMonitor:
+class QuietFishApp:
     def __init__(self):
-        self.pa = pyaudio.PyAudio()
-        self.stream = self.pa.open(
-            format=pyaudio.paInt16,
-            channels=1,
-            rate=44100,
-            input=True,
-            frames_per_buffer=1024
-        )
-        self.volume_history = deque(maxlen=30)  # 平滑处理
+        pygame.init()
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("安静养鱼 - 自习神器")
+        self.clock = pygame.time.Clock()
 
-    def get_volume(self):
-        """获取当前麦克风音量 (0-100)"""
-        try:
-            data = self.stream.read(1024, exception_on_overflow=False)
-            samples = list(data)
-            rms = math.sqrt(sum(s*s for s in samples) / len(samples))
-            volume = min(100, int(rms / 50))  # 归一化到 0-100
-            self.volume_history.append(volume)
-            return sum(self.volume_history) / len(self.volume_history)
-        except:
-            return 0
+        # 初始化模块
+        self.font_manager = FontManager()
+        self.ui = UIPanel(self.font_manager)
+        self.audio = AudioMonitor()
+        self.stats = StatsManager()
 
-    def close(self):
-        self.stream.stop_stream()
-        self.stream.close()
-        self.pa.terminate()
+        # 游戏状态
+        self.fish_list = []
+        self.bubbles = []
+        self.quiet_time_this_session = 0
+        self.last_time = time.time()
+        self.is_quiet = True
 
+        # 番茄钟状态
+        self.pomodoro = {
+            "active": False,
+            "is_break": False,
+            "start_time": 0,
+            "end_time": 0
+        }
 
-# ============ 鱼类 =========---
-class Fish:
-    def __init__(self):
-        self.x = random.randint(50, WIDTH - 50)
-        self.y = random.randint(100, HEIGHT - 50)
-        self.speed = random.uniform(0.5, 1.5)
-        self.direction = random.choice([-1, 1])
-        self.color = random.choice(FISH_COLORS)
-        self.size = random.randint(15, 25)
-        self.wobble = random.uniform(0, math.pi * 2)
-        self.is_fleeing = False
-        self.flee_timer = 0
+        # 成就通知
+        self.new_achievements = []
+        self.achievement_flash_timer = 0
 
-    def update(self, volume, dt):
-        """更新鱼的状态"""
-        self.wobble += 5 * dt
+        # 检查连续天数
+        self.stats.check_streak()
 
-        if volume > SILENCE_THRESHOLD:
-            self.is_fleeing = True
-            self.flee_timer = 1.0
-        elif self.flee_timer > 0:
-            self.flee_timer -= dt
-        else:
-            self.is_fleeing = False
+        # 初始鱼
+        for _ in range(6):
+            self.fish_list.append(Fish())
 
-        if self.is_fleeing:
-            # 逃跑模式：向右/左快速游动
-            self.x += self.speed * FISH_FLEE_SPEED * self.direction * 60 * dt
-            self.y += random.uniform(-1, 1)
-        else:
-            # 正常游动：左右摆动
-            self.x += self.speed * self.direction * 30 * dt
-            self.y += math.sin(self.wobble) * 0.5
-
-        # 边界检测
-        if self.x > WIDTH + 30:
-            self.x = -30
-            self.y = random.randint(100, HEIGHT - 50)
-            self.direction = 1
-        elif self.x < -30:
-            self.x = WIDTH + 30
-            self.y = random.randint(100, HEIGHT - 50)
-            self.direction = -1
-
-    def draw(self, surface):
-        """绘制鱼"""
-        # 身体
-        pygame.draw.ellipse(surface, self.color,
-                          (self.x, self.y - self.size//2,
-                           self.size * 1.5, self.size))
-
-        # 尾巴
-        tail_x = self.x - (self.size * 0.8 if self.direction > 0 else -self.size * 0.3)
-        tail_points = [
-            (self.x - (self.size * 0.7 if self.direction > 0 else -self.size * 0.3), self.y),
-            (self.x - (self.size * 1.3 if self.direction > 0 else -self.size * 0.7), self.y - self.size//2),
-            (self.x - (self.size * 1.3 if self.direction > 0 else -self.size * 0.7), self.y + self.size//2)
-        ]
-        pygame.draw.polygon(surface, self.color, tail_points)
-
-        # 眼睛
-        eye_x = self.x + (self.size * 0.5 if self.direction > 0 else -self.size * 0.2)
-        pygame.draw.circle(surface, (255, 255, 255), (int(eye_x), int(self.y - 3)), 4)
-        pygame.draw.circle(surface, (0, 0, 0), (int(eye_x + (1 if self.direction > 0 else -1)), int(self.y - 3)), 2)
-
-
-# ============ 主程序 ============
-def main():
-    pygame.init()
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("安静养鱼 - 自习神器")
-    clock = pygame.time.Clock()
-    font = get_font(36)
-
-    # 初始化音频
-    audio = AudioMonitor()
-    fish_list = [Fish() for _ in range(10)]  # 初始 10 条鱼
-
-    running = True
-    while running:
-        dt = clock.tick(FPS) / 1000.0  # 帧时间
-
-        # 事件处理
+    def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                return False
 
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_q:
+                    return False
+                elif event.key == pygame.K_SPACE:
+                    self.toggle_pomodoro()
+                elif event.key == pygame.K_s:
+                    self.save_screenshot()
+
+        return True
+
+    def toggle_pomodoro(self):
+        """切换番茄钟"""
+        now = pygame.time.get_ticks()
+        if self.pomodoro["active"]:
+            # 停止番茄钟
+            self.pomodoro["active"] = False
+            self.pomodoro["is_break"] = False
+        else:
+            # 开始工作番茄钟
+            self.pomodoro["active"] = True
+            self.pomodoro["is_break"] = False
+            self.pomodoro["start_time"] = now
+            self.pomodoro["end_time"] = now + POMODORO_WORK_MINUTES * 60 * 1000
+
+    def check_pomodoro_complete(self):
+        """检查番茄钟是否完成"""
+        if not self.pomodoro["active"]:
+            return
+
+        now = pygame.time.get_ticks()
+        if now >= self.pomodoro["end_time"]:
+            if self.pomodoro["is_break"]:
+                # 休息结束，回到工作
+                self.pomodoro["is_break"] = False
+                self.pomodoro["start_time"] = now
+                self.pomodoro["end_time"] = now + POMODORO_WORK_MINUTES * 60 * 1000
+            else:
+                # 工作结束
+                self.stats.record_pomodoro()
+                self.new_achievements.append("focus_warrior")
+                self.achievement_flash_timer = 2.0
+                # 开始休息
+                self.pomodoro["is_break"] = True
+                self.pomodoro["start_time"] = now
+                self.pomodoro["end_time"] = now + POMODORO_BREAK_MINUTES * 60 * 1000
+
+    def save_screenshot(self):
+        """保存截图"""
+        filename = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        pygame.image.save(self.screen, filename)
+
+    def update(self, dt):
         # 获取音量
-        volume = audio.get_volume()
+        volume = self.audio.get_volume()
+        self.is_quiet = volume < SILENCE_THRESHOLD
+
+        # 安静时间统计
+        if self.is_quiet:
+            self.quiet_time_this_session += dt
+            self.stats.record_quiet_time(dt)
+
+        # 番茄钟检查
+        self.check_pomodoro_complete()
 
         # 根据音量调整鱼数量
         target_fish = MIN_FISH + int((MAX_FISH - MIN_FISH) * (1 - volume / 150))
         target_fish = max(MIN_FISH, min(MAX_FISH, target_fish))
 
         # 补充或移除鱼
-        while len(fish_list) < target_fish:
-            fish_list.append(Fish())
-        while len(fish_list) > target_fish:
-            fish_list.pop()
+        while len(self.fish_list) < target_fish:
+            fish = Fish()
+            self.fish_list.append(fish)
+            self.stats.record_fish(fish)
+            # 偶尔生成气泡
+            if random.random() < 0.25:
+                self.bubbles.append(Bubble(random.randint(100, WIDTH-100), HEIGHT, WIDTH))
 
-        # 更新所有鱼
-        for fish in fish_list:
-            fish.update(volume, dt)
+        while len(self.fish_list) > target_fish:
+            self.fish_list.pop()
 
-        # 绘制
-        screen.fill(BG_COLOR)
+        # 更新鱼
+        for fish in self.fish_list:
+            fish.update(volume, dt, WATER_TOP)
 
-        # 水背景
-        pygame.draw.rect(screen, WATER_COLOR, (0, 80, WIDTH, HEIGHT - 80))
+        # 更新气泡
+        self.bubbles = [b for b in self.bubbles if b.draw(self.screen, WATER_TOP)]
+        if random.random() < 0.015:
+            self.bubbles.append(Bubble(random.randint(50, WIDTH-50), HEIGHT, WIDTH))
 
-        # 画水草装饰
-        for i in range(0, WIDTH, 60):
-            height = 80 + 20 * math.sin(time.time() * 2 + i)
-            pygame.draw.line(screen, (30, 100, 60), (i, HEIGHT), (i + 10, height), 4)
+        # 检查成就
+        is_night = 23 <= datetime.now().hour <= 6 or 0 <= datetime.now().hour < 6
+        quiet_hours = self.stats.stats["total_quiet_seconds"] / 3600
+        new_achs = self.stats.check_achievements(len(self.fish_list), quiet_hours, is_night)
+        if new_achs:
+            self.new_achievements.extend(new_achs)
+            self.achievement_flash_timer = 2.0
+
+        # 更新成就通知计时
+        if self.achievement_flash_timer > 0:
+            self.achievement_flash_timer -= dt
+            if self.achievement_flash_timer < 0:
+                self.new_achievements = []
+
+    def draw_background(self):
+        """绘制背景"""
+        self.screen.fill(BG_COLOR)
+
+        # 水面渐变
+        for y in range(WATER_TOP, HEIGHT, 3):
+            ratio = (y - WATER_TOP) / (HEIGHT - WATER_TOP)
+            color = (
+                int(30 + ratio * 25),
+                int(80 + ratio * 40),
+                int(130 + ratio * 50)
+            )
+            pygame.draw.line(self.screen, color, (0, y), (WIDTH, y), 3)
+
+        # 水草
+        for i in range(0, WIDTH, 90):
+            base_height = WATER_TOP + 15 + 12 * (i % 3)
+            sway = math.sin(time.time() * 1.5 + i * 0.08) * 18
+            points = [(i + 20, HEIGHT), (i + 28 + sway, HEIGHT - 70),
+                      (i + 35 + sway * 1.6, base_height)]
+            pygame.draw.lines(self.screen, (45, 150, 90), False, points, 4)
+
+    def draw(self):
+        self.draw_background()
 
         # 画鱼
-        for fish in fish_list:
-            fish.draw(screen)
+        for fish in self.fish_list:
+            fish.draw(self.screen)
 
-        # UI 显示
-        vol_text = font.render(f"音量: {volume:.0f}", True, (255, 255, 255))
-        fish_text = font.render(f"鱼: {len(fish_list)}/{MAX_FISH}", True, (255, 255, 255))
-        screen.blit(vol_text, (20, 20))
-        screen.blit(fish_text, (20, 55))
+        # UI
+        volume = self.audio.get_volume()
+        self.ui.draw_stats_panel(self.screen, self.stats, volume, len(self.fish_list),
+                                 self.is_quiet, self.pomodoro)
+        self.ui.draw_fish_panel(self.screen, self.fish_list)
+        self.ui.draw_pomodoro(self.screen, self.pomodoro)
+        self.ui.draw_volume_meter(self.screen, volume)
+        self.ui.draw_rarity_legend(self.screen)
+        self.ui.draw_help(self.screen)
 
-        # 安静提示
-        if volume < SILENCE_THRESHOLD:
-            hint = font.render("好安静，鱼儿都在~", True, (100, 255, 150))
-        else:
-            hint = font.render("太吵了！鱼都跑了！", True, (255, 100, 100))
-        screen.blit(hint, (WIDTH - 300, 20))
+        # 成就通知
+        if self.new_achievements and self.achievement_flash_timer > 0:
+            self.ui.draw_achievements(self.screen, self.new_achievements, self.achievement_flash_timer / 2.0)
 
         pygame.display.flip()
 
-    audio.close()
-    pygame.quit()
+    def run(self):
+        running = True
+        while running:
+            dt = self.clock.tick(FPS) / 1000.0
+            self.last_time = time.time()
+
+            running = self.handle_events()
+            self.update(dt)
+            self.draw()
+
+        # 保存数据
+        self.stats.save_stats()
+        self.audio.close()
+        pygame.quit()
+
+
+def main():
+    app = QuietFishApp()
+    app.run()
 
 
 if __name__ == "__main__":
