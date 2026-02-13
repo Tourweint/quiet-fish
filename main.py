@@ -14,7 +14,8 @@ from config import (
     WIDTH, HEIGHT, FPS, BG_COLOR, WATER_TOP,
     SILENCE_THRESHOLD, MAX_FISH, MIN_FISH,
     POMODORO_WORK_MINUTES, POMODORO_BREAK_MINUTES,
-    ACHIEVEMENTS
+    ACHIEVEMENTS, FISH_INITIAL_COUNT, FISH_BUBBLE_CHANCE,
+    BUBBLE_SPAWN_CHANCE, NIGHT_START_HOUR, NIGHT_END_HOUR
 )
 
 # 导入模块
@@ -61,8 +62,12 @@ class QuietFishApp:
         # 检查连续天数
         self.stats.check_streak()
 
+        # 预计算随机边界，减少每帧计算
+        self._bubble_x_range = (100, WIDTH - 100)
+        self._bubble_small_x_range = (50, WIDTH - 50)
+
         # 初始鱼
-        for _ in range(6):
+        for _ in range(FISH_INITIAL_COUNT):
             self.fish_list.append(Fish())
 
     def handle_events(self):
@@ -139,30 +144,41 @@ class QuietFishApp:
         target_fish = max(MIN_FISH, min(MAX_FISH, target_fish))
 
         # 补充或移除鱼
-        while len(self.fish_list) < target_fish:
+        fish_list = self.fish_list
+        stats = self.stats
+        
+        while len(fish_list) < target_fish:
             fish = Fish()
-            self.fish_list.append(fish)
-            self.stats.record_fish(fish)
+            fish_list.append(fish)
+            stats.record_fish(fish)
             # 偶尔生成气泡
-            if random.random() < 0.25:
-                self.bubbles.append(Bubble(random.randint(100, WIDTH-100), HEIGHT, WIDTH))
+            if random.random() < FISH_BUBBLE_CHANCE:
+                self.bubbles.append(Bubble(
+                    random.randint(*self._bubble_x_range),
+                    HEIGHT, WIDTH
+                ))
 
-        while len(self.fish_list) > target_fish:
-            self.fish_list.pop()
+        while len(fish_list) > target_fish:
+            fish_list.pop()
 
         # 更新鱼
-        for fish in self.fish_list:
+        for fish in fish_list:
             fish.update(volume, dt, WATER_TOP)
 
         # 更新气泡
         self.bubbles = [b for b in self.bubbles if b.draw(self.screen, WATER_TOP)]
-        if random.random() < 0.015:
-            self.bubbles.append(Bubble(random.randint(50, WIDTH-50), HEIGHT, WIDTH))
+        if random.random() < BUBBLE_SPAWN_CHANCE:
+            self.bubbles.append(Bubble(
+                random.randint(*self._bubble_small_x_range),
+                HEIGHT, WIDTH
+            ))
 
-        # 检查成就
-        is_night = 23 <= datetime.now().hour <= 6 or 0 <= datetime.now().hour < 6
-        quiet_hours = self.stats.stats["total_quiet_seconds"] / 3600
-        new_achs = self.stats.check_achievements(len(self.fish_list), quiet_hours, is_night)
+        # 检查成就 - 缓存当前时间
+        current_hour = datetime.now().hour
+        is_night = current_hour >= NIGHT_START_HOUR or current_hour < NIGHT_END_HOUR
+        quiet_hours = stats.stats["total_quiet_seconds"] / 3600
+        
+        new_achs = stats.check_achievements(len(fish_list), quiet_hours, is_night)
         if new_achs:
             self.new_achievements.extend(new_achs)
             self.achievement_flash_timer = 2.0
@@ -177,9 +193,10 @@ class QuietFishApp:
         """绘制背景"""
         self.screen.fill(BG_COLOR)
 
-        # 水面渐变
+        # 水面渐变 - 使用预计算颜色减少每帧计算
+        water_height = HEIGHT - WATER_TOP
         for y in range(WATER_TOP, HEIGHT, 3):
-            ratio = (y - WATER_TOP) / (HEIGHT - WATER_TOP)
+            ratio = (y - WATER_TOP) / water_height
             color = (
                 int(30 + ratio * 25),
                 int(80 + ratio * 40),
@@ -188,11 +205,15 @@ class QuietFishApp:
             pygame.draw.line(self.screen, color, (0, y), (WIDTH, y), 3)
 
         # 水草
+        current_time = time.time()
         for i in range(0, WIDTH, 90):
             base_height = WATER_TOP + 15 + 12 * (i % 3)
-            sway = math.sin(time.time() * 1.5 + i * 0.08) * 18
-            points = [(i + 20, HEIGHT), (i + 28 + sway, HEIGHT - 70),
-                      (i + 35 + sway * 1.6, base_height)]
+            sway = math.sin(current_time * 1.5 + i * 0.08) * 18
+            points = [
+                (i + 20, HEIGHT),
+                (i + 28 + sway, HEIGHT - 70),
+                (i + 35 + sway * 1.6, base_height)
+            ]
             pygame.draw.lines(self.screen, (45, 150, 90), False, points, 4)
 
     def draw(self):

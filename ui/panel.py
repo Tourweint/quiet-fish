@@ -1,6 +1,6 @@
 """UI面板模块"""
 import pygame
-from config import RARITY, ACHIEVEMENTS, POMODORO_WORK_MINUTES, POMODORO_BREAK_MINUTES
+from config import RARITY, ACHIEVEMENTS, POMODORO_WORK_MINUTES, POMODORO_BREAK_MINUTES, SILENCE_THRESHOLD, WIDTH
 
 
 def get_font(font_manager, size=28):

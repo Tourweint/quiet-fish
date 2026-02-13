@@ -20,10 +20,14 @@ class Bubble:
     def draw(self, surface, water_top):
         if self.y < water_top:
             return False
+        
+        x, y, size = int(self.x), int(self.y), self.size
+        
         # 气泡外圈
-        pygame.draw.circle(surface, (200, 230, 255), (int(self.x), int(self.y)), self.size, 1)
+        pygame.draw.circle(surface, (200, 230, 255), (x, y), size, 1)
+        
         # 高光
-        highlight = max(1, self.size // 4)
+        highlight = max(1, size // 4)
         pygame.draw.circle(surface, (255, 255, 255),
-                          (int(self.x - self.size * 0.3), int(self.y - self.size * 0.3)), highlight)
+                          (int(x - size * 0.3), int(y - size * 0.3)), highlight)
         return True

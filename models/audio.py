@@ -21,13 +21,14 @@ class AudioMonitor:
         """获取当前麦克风音量 (0-100)"""
         try:
             data = self.stream.read(1024, exception_on_overflow=False)
-            samples = list(data)
-            rms = math.sqrt(sum(s*s for s in samples) / len(samples))
+            # 直接使用字节数据进行计算，避免转换为列表
+            rms = math.sqrt(sum(b * b for b in data) / len(data))
             volume = min(100, int(rms / 50))
             self.volume_history.append(volume)
             self.current_volume = sum(self.volume_history) / len(self.volume_history)
             return self.current_volume
-        except:
+        except OSError:
+            # 音频设备读取错误时返回默认值
             return 0
 
     def is_quiet(self, threshold):
@@ -35,6 +36,11 @@ class AudioMonitor:
         return self.current_volume < threshold
 
     def close(self):
-        self.stream.stop_stream()
-        self.stream.close()
-        self.pa.terminate()
+        """关闭音频流和 PyAudio"""
+        try:
+            self.stream.stop_stream()
+            self.stream.close()
+        except OSError:
+            pass  # 流可能已经关闭
+        finally:
+            self.pa.terminate()
