@@ -21,10 +21,10 @@ class UIPanel:
         # 边框
         pygame.draw.rect(surface, border_color, (x, y, width, height), 2, border_radius=8)
 
-        # 标题
+        # 标题（绘制在面板内部左上角）
         if title:
             title_surf = self.title_font.render(title, True, border_color)
-            surface.blit(title_surf, (x + 10, y - 5))
+            surface.blit(title_surf, (x + 8, y + 6))
 
     def draw_stats_panel(self, surface, stats_manager, volume, fish_count, is_quiet, pomodoro_state):
         """左侧统计面板"""
@@ -32,7 +32,7 @@ class UIPanel:
 
         summary = stats_manager.get_summary()
         line_height = 26
-        start_y = 40
+        start_y = 42  # 内容从标题下方开始
 
         # 等级
         level_info = summary["level"]
@@ -70,7 +70,7 @@ class UIPanel:
         for fish in fish_list:
             counts[fish.rarity] += 1
 
-        y_offset = 45
+        y_offset = 48  # 内容从标题下方开始
         line_height = 24
         for key, data in RARITY.items():
             count = counts[key]
@@ -91,16 +91,16 @@ class UIPanel:
             seconds = (remaining % 60000) // 1000
 
             time_text = self.font.render(f"{minutes:02d}:{seconds:02d}", True, (255, 255, 255))
-            surface.blit(time_text, (WIDTH - 145, 48))
+            surface.blit(time_text, (WIDTH - 140, 50))
 
             # 状态提示
             status = "工作中" if not pomodoro_state["is_break"] else "休息中"
             status_text = self.small_font.render(status, True, (255, 200, 150))
-            surface.blit(status_text, (WIDTH - 125, 72))
+            surface.blit(status_text, (WIDTH - 120, 75))
         else:
             # 未激活时显示按钮提示
             hint = self.small_font.render("按空格开启", True, (180, 180, 180))
-            surface.blit(hint, (WIDTH - 150, 50))
+            surface.blit(hint, (WIDTH - 145, 50))
 
     def draw_volume_meter(self, surface, volume):
         """音量条"""
@@ -133,7 +133,7 @@ class UIPanel:
         alpha = min(255, int(255 * achievement_flash_timer))
         panel_width = 300
         x = (WIDTH - panel_width) // 2
-        y = 65 - (1 - achievement_flash_timer) * 40
+        y = 60 - (1 - achievement_flash_timer) * 40
 
         # 背景
         panel = pygame.Surface((panel_width, 60), pygame.SRCALPHA)
@@ -144,7 +144,7 @@ class UIPanel:
         pygame.draw.rect(surface, (255, 215, 0, alpha), (x, y, panel_width, 60), 3, border_radius=10)
 
         # 成就文字
-        for i, ach_key in enumerate(new_achievements[:1]):  # 最多显示1个
+        for i, ach_key in enumerate(new_achievements[:1]):
             ach = ACHIEVEMENTS[ach_key]
             text = self.font.render(f"{ach['name']}: {ach['desc']}", True, (255, 255, 255, alpha))
             surface.blit(text, (x + 15, y + 18))
@@ -153,7 +153,7 @@ class UIPanel:
         """稀有度图例"""
         self.draw_panel(surface, WIDTH - 145, 180, 130, 170, "稀有度", (255, 215, 0))
 
-        y_offset = 42
+        y_offset = 45
         line_height = 26
         for key, data in RARITY.items():
             color = data["colors"][0]
@@ -172,7 +172,7 @@ class UIPanel:
             "S: 截图",
             "Q: 退出"
         ]
-        y_offset = 40
+        y_offset = 42
         for text in help_texts:
             help_surf = self.small_font.render(text, True, (200, 200, 200))
             surface.blit(help_surf, (WIDTH - 135, y_offset))
