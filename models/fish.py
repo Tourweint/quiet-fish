@@ -117,12 +117,12 @@ class Fish:
         pygame.draw.ellipse(surface, self.color, body_rect)
 
         # 尾巴
-        tail_offset = size * d["tail_offset"]
+        tail_offset = size * (0.8 if self.direction > 0 else -0.4)
         tail_x = self.x - tail_offset
         tail_points = [
             (self.x - size * (0.5 if self.direction > 0 else -0.2), self.y),
-            (self.x - size * d["tail_points_offset"][2], self.y - size * 0.75),
-            (self.x - size * d["tail_points_offset"][4], self.y + size * 0.75)
+            (self.x - size * (1.45 if self.direction > 0 else -1.15), self.y - size * 0.75),
+            (self.x - size * (1.45 if self.direction > 0 else -1.15), self.y + size * 0.75)
         ]
         pygame.draw.polygon(surface, self.color, tail_points)
 

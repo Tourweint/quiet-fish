@@ -1,0 +1,15 @@
+{
+  "total_quiet_seconds": 0.912,
+  "total_fish_caught": 18,
+  "fish_by_rarity": {
+    "rare": 5,
+    "common": 10,
+    "epic": 2,
+    "legendary": 1
+  },
+  "pomodoro_completed": 0,
+  "streak_days": 1,
+  "last_used_date": "2026-02-13",
+  "total_sessions": 1,
+  "points": 1750.0
+}
