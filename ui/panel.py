@@ -10,7 +10,8 @@ def get_font(font_manager, size=28):
 
 class UIPanel:
     def __init__(self, font_manager):
-        self.font = font_manager
+        self.font_manager = font_manager
+        self.font = font_manager.get_font(28)  # 主字体
         self.title_font = font_manager.get_font(22)
         self.small_font = font_manager.get_font(18)
         self.icon_font = font_manager.get_font(20)
