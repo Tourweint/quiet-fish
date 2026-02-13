@@ -16,7 +16,7 @@ POMODORO_BREAK_MINUTES = 5
 # ============ 声音配置 ============
 SILENCE_THRESHOLD = 500
 MAX_FISH = 25
-MIN_FISH = 0
+MIN_FISH = 8  # 保底8条鱼，无论声音多大都会存在
 FISH_FLEE_SPEED = 2.5
 
 # ============ 音频监控配置 ============
@@ -27,7 +27,7 @@ AUDIO_RMS_DIVISOR = 50  # 用于将 RMS 转换为 0-100 的音量
 AUDIO_MAX_VOLUME = 100
 
 # ============ 鱼的行为配置 ============
-FISH_INITIAL_COUNT = 6
+FISH_INITIAL_COUNT = 1  # 初始只有1条鱼
 FISH_BUBBLE_CHANCE = 0.25
 BUBBLE_SPAWN_CHANCE = 0.015
 FISH_GLOW_AGE_THRESHOLD = 0.3  # 鱼需要显示多久后才显示发光效果
@@ -79,7 +79,7 @@ RARITY = {
         "name": "传说",
         "colors": [(255, 215, 0)],
         "size": (35, 45),
-        "weight": 5,
+        "weight": 1,  # 降低权重，让传说鱼更稀有（约1%概率）
         "threshold": 0.5,
         "speed": 1.5,
         "glow": True,
@@ -90,7 +90,7 @@ RARITY = {
         "name": "神话",
         "colors": [(255, 255, 255), (0, 255, 255)],
         "size": (42, 55),
-        "weight": 3,
+        "weight": 1,  # 神话鱼同样稀有
         "threshold": 0.35,
         "speed": 1.8,
         "glow": True,
@@ -100,10 +100,31 @@ RARITY = {
 }
 
 # 稀有度权重列表（用于快速查找）
+# 权重值越大，出现概率越高
 RARITY_WEIGHTS = []
 for key, data in RARITY.items():
     for _ in range(data["weight"]):
         RARITY_WEIGHTS.append(key)
+
+# 初始鱼数量配置
+FISH_INITIAL_COUNT = 3  # 初始只有3条鱼，寥寥无几
+
+# ============ 鱼权重系统配置 ============
+# 每种鱼的权重值（越高越容易获得/失去）
+FISH_RARITY_WEIGHT = {
+    "common": 5,      # 普通鱼：权重5，最容易加减
+    "rare": 4,        # 稀有鱼：权重4
+    "epic": 3,        # 史诗鱼：权重3
+    "legendary": 2,   # 传说鱼：权重2
+    "mythic": 1,      # 神话鱼：权重1，最难获得
+}
+
+# 基础时间间隔（秒）- 用于计算实际加减鱼时间
+BASE_WEIGHT_INTERVAL = 10  # 基础周期10秒
+
+# 声音影响系数
+VOLUME_ADD_MULTIPLIER = 1.0   # 安静时加权倍率
+VOLUME_REMOVE_MULTIPLIER = 2.0  # 吵闹时减权倍率（减得更快）
 
 # ============ 成就定义 ============
 ACHIEVEMENTS = {
