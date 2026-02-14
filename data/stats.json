@@ -1,16 +1,16 @@
 {
-  "total_quiet_seconds": 3495.528000001196,
-  "total_fish_caught": 1353,
+  "total_quiet_seconds": 4740.056000003158,
+  "total_fish_caught": 1413,
   "fish_by_rarity": {
-    "rare": 296,
-    "common": 852,
-    "epic": 146,
-    "legendary": 43,
+    "rare": 310,
+    "common": 887,
+    "epic": 152,
+    "legendary": 48,
     "mythic": 16
   },
   "pomodoro_completed": 0,
   "streak_days": 2,
   "last_used_date": "2026-02-14",
   "total_sessions": 2,
-  "points": 175520.0
+  "points": 182770.0
 }

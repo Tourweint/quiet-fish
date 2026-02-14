@@ -208,8 +208,9 @@ class QuietFishApp:
         # 吵闹时：快速失去鱼，权重清零
         if self.is_quiet:
             # 安静环境：慢慢积累权重
+            # [可调整] 如需修改积分积累速度，参见 doc/fish_probability.md 第6.5节
             # 基础积累速度：每秒积累 0.3-0.8 点权重（很慢）
-            base_accumulation = 0.3 + quietness * 0.5
+            base_accumulation = 0.3 + quietness * 0.5  # [可调整] 0.3是最小速度，0.5是速度范围
             net_weight_change = base_accumulation * time_delta
             # 积累安静积分
             self.quiet_score += net_weight_change
@@ -230,23 +231,25 @@ class QuietFishApp:
 
         # === 基于累计安静时间的品质解锁系统 ===
         # 30分钟(1800秒)内渐进解锁高品质鱼
+        # [可调整] 如需修改品质解锁时间，参见 doc/fish_probability.md 第6.1节
         quiet_minutes = self.session_quiet_time / 60
 
         # 根据累计安静时间确定可出现的最高品质
+        # [可调整] 以下时间阈值控制各品质鱼的解锁时机
         # 0-2分钟：只有普通
         # 2-5分钟：解锁稀有
         # 5-10分钟：解锁史诗
         # 10-20分钟：解锁传说
         # 20-30分钟：解锁神话
-        if quiet_minutes < 2:
+        if quiet_minutes < 2:           # [可调整] 普通鱼解锁时间(分钟)
             max_unlocked_rarity = "common"
-        elif quiet_minutes < 5:
+        elif quiet_minutes < 5:         # [可调整] 稀有鱼解锁时间(分钟)
             max_unlocked_rarity = "rare"
-        elif quiet_minutes < 10:
+        elif quiet_minutes < 10:        # [可调整] 史诗鱼解锁时间(分钟)
             max_unlocked_rarity = "epic"
-        elif quiet_minutes < 20:
+        elif quiet_minutes < 20:        # [可调整] 传说鱼解锁时间(分钟)
             max_unlocked_rarity = "legendary"
-        else:
+        else:                           # [可调整] 神话鱼解锁时间(分钟)
             max_unlocked_rarity = "mythic"
 
         # 构建允许的稀有度列表
@@ -255,10 +258,11 @@ class QuietFishApp:
         allowed_rarities = rarity_order[:max_index + 1]
 
         # 根据累计时间调整加鱼难度（越往后越难加，但品质越高）
+        # [可调整] 如需修改加鱼难度规则，参见 doc/fish_probability.md 第6.4节
         # 基础需要积分：10点
         # 每过5分钟增加5点难度
-        difficulty_increase = int(quiet_minutes / 5) * 5
-        self.current_required_score = 10 + difficulty_increase
+        difficulty_increase = int(quiet_minutes / 5) * 5  # [可调整] 修改 /5 和 *5 改变难度增长
+        self.current_required_score = 10 + difficulty_increase  # [可调整] 修改 10 改变基础难度
 
         # === 加鱼逻辑 ===
         if len(fish_list) < self.max_fish_limit and self.is_quiet and net_weight_change > 0:
@@ -268,29 +272,33 @@ class QuietFishApp:
                 # 时间越长，高品质概率越高
                 time_factor = min(1.0, quiet_minutes / 30)  # 0-1，30分钟达到最大
 
-                # 基础权重
+                # 基础权重 - 调整后30分钟高品质概率更高
+                # [可调整] 如需修改基础权重，参见 doc/fish_probability.md 第6.2节
                 base_weights = {
-                    "common": 40,
-                    "rare": 30,
-                    "epic": 20,
-                    "legendary": 8,
-                    "mythic": 2
+                    "common": 35,      # [可调整] 普通鱼基础权重
+                    "rare": 30,        # [可调整] 稀有鱼基础权重
+                    "epic": 20,        # [可调整] 史诗鱼基础权重
+                    "legendary": 10,   # [可调整] 传说鱼基础权重
+                    "mythic": 5        # [可调整] 神话鱼基础权重
                 }
 
                 # 根据时间调整权重（时间越长，高品质权重越高）
+                # [可调整] 如需修改时间对权重的影响，参见 doc/fish_probability.md 第6.3节
                 rarity_weights = {}
                 for rarity in allowed_rarities:
                     if rarity == "common":
-                        # 普通鱼权重随时间降低
-                        rarity_weights[rarity] = base_weights[rarity] * (1 - time_factor * 0.5)
+                        # 普通鱼权重随时间大幅降低
+                        rarity_weights[rarity] = base_weights[rarity] * (1 - time_factor * 0.7)  # [可调整] 0.7控制普通鱼权重下降速度
                     elif rarity == "rare":
-                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 0.3)
+                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 0.2)  # [可调整] 0.2控制稀有鱼权重增长速度
                     elif rarity == "epic":
-                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 0.8)
+                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 0.6)  # [可调整] 0.6控制史诗鱼权重增长速度
                     elif rarity == "legendary":
-                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 2)
+                        # 传说鱼30分钟时权重翻倍
+                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 4)    # [可调整] 4控制传说鱼权重增长速度
                     elif rarity == "mythic":
-                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 4)
+                        # 神话鱼30分钟时权重翻5倍
+                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 8)    # [可调整] 8控制神话鱼权重增长速度
 
                 # 只选择允许的稀有度
                 available_rarities = [r for r in allowed_rarities]
@@ -405,7 +413,7 @@ class QuietFishApp:
                                  self.is_quiet, self.pomodoro)
         self.ui.draw_fish_panel(self.screen, self.fish_list, self.fish_weights,
                                 self.quiet_score, self.current_required_score,
-                                self.max_fish_limit, self.session_quiet_time)
+                                self.max_fish_limit, self.session_quiet_time, self.is_quiet)
         self.ui.draw_pomodoro(self.screen, self.pomodoro)
         self.ui.draw_volume_meter(self.screen, volume)
         self.ui.draw_rarity_legend(self.screen)
