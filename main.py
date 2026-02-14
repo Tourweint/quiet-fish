@@ -81,6 +81,10 @@ class QuietFishApp:
         self._bubble_x_range = (100, WIDTH - 100)
         self._bubble_small_x_range = (50, WIDTH - 50)
 
+        # 水面光斑效果初始化
+        self.light_spots = []
+        self._init_light_spots()
+
         # 初始鱼 - 只生成普通或稀有（不会出现史诗及以上）
         for _ in range(FISH_INITIAL_COUNT):
             fish = self._create_initial_fish()
@@ -108,7 +112,7 @@ class QuietFishApp:
         initial_rarities = ["common", "rare"]
         # 普通概率 70%，稀有概率 30%
         rarity = random.choices(initial_rarities, weights=[70, 30])[0]
-        
+
         # 创建鱼并强制设置稀有度
         fish = Fish()
         fish.rarity = rarity
@@ -120,8 +124,56 @@ class QuietFishApp:
         fish.has_glow = data["glow"]
         fish.glow_color = data.get("glow_color", (255, 255, 255, 100))
         fish.points = data.get("points", 10)
-        
+
         return fish
+
+    def _init_light_spots(self):
+        """初始化水面光斑"""
+        import random
+        for _ in range(8):
+            self.light_spots.append({
+                'x': random.randint(50, WIDTH - 50),
+                'y': random.randint(WATER_TOP + 30, HEIGHT - 50),
+                'size': random.randint(20, 50),
+                'speed': random.uniform(5, 15),
+                'phase': random.uniform(0, math.pi * 2),
+                'alpha': random.randint(20, 40)
+            })
+
+    def _update_and_draw_light_spots(self, dt):
+        """更新并绘制水面光斑"""
+        current_time = time.time()
+        for spot in self.light_spots:
+            # 缓慢移动
+            spot['x'] += math.sin(current_time * 0.5 + spot['phase']) * spot['speed'] * dt
+            spot['y'] += math.cos(current_time * 0.3 + spot['phase']) * spot['speed'] * 0.5 * dt
+
+            # 边界检查
+            if spot['x'] < 0:
+                spot['x'] = WIDTH
+            elif spot['x'] > WIDTH:
+                spot['x'] = 0
+            if spot['y'] < WATER_TOP:
+                spot['y'] = HEIGHT - 50
+            elif spot['y'] > HEIGHT - 50:
+                spot['y'] = WATER_TOP + 30
+
+            # 呼吸效果
+            breathe = math.sin(current_time * 2 + spot['phase']) * 0.3 + 1
+            current_size = spot['size'] * breathe
+            current_alpha = int(spot['alpha'] * (0.7 + 0.3 * math.sin(current_time + spot['phase'])))
+
+            # 绘制光斑
+            spot_surf = pygame.Surface((int(current_size * 2), int(current_size * 2)), pygame.SRCALPHA)
+            # 多层渐变
+            for layer in range(3):
+                layer_size = current_size * (1 - layer * 0.25)
+                layer_alpha = current_alpha // (layer + 1)
+                color = (255, 255, 220, layer_alpha)
+                pygame.draw.ellipse(spot_surf, color,
+                                   (current_size - layer_size, current_size - layer_size,
+                                    layer_size * 2, layer_size * 2))
+            self.screen.blit(spot_surf, (int(spot['x'] - current_size), int(spot['y'] - current_size)))
 
     def toggle_pomodoro(self):
         """切换番茄钟"""
@@ -209,8 +261,8 @@ class QuietFishApp:
         if self.is_quiet:
             # 安静环境：慢慢积累权重
             # [可调整] 如需修改积分积累速度，参见 doc/fish_probability.md 第6.5节
-            # 基础积累速度：每秒积累 0.3-0.8 点权重（很慢）
-            base_accumulation = 0.3 + quietness * 0.5  # [可调整] 0.3是最小速度，0.5是速度范围
+            # 基础积累速度：每秒积累 0.2-0.8 点权重（很慢）
+            base_accumulation = 0.2 + quietness * 0.5  # [可调整] 0.3是最小速度，0.5是速度范围
             net_weight_change = base_accumulation * time_delta
             # 积累安静积分
             self.quiet_score += net_weight_change
@@ -387,6 +439,9 @@ class QuietFishApp:
                 int(130 + ratio * 50)
             )
             pygame.draw.line(self.screen, color, (0, y), (WIDTH, y), 3)
+
+        # 水面光斑 - 在鱼下面绘制
+        self._update_and_draw_light_spots(1 / FPS)
 
         # 水草
         current_time = time.time()

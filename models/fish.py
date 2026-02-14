@@ -103,17 +103,15 @@ class Fish:
         ]
         pygame.draw.polygon(surface, self._darken_color(self.color, 30), fin_points)
 
-        # 身体 - 椭圆形，更自然
+        # 身体 - 使用渐变效果
         body_width = size * 1.7
         body_height = size * 0.9
-        body_rect = (
-            self.x - body_width // 2 + tail_wag * 0.2 * d,
-            self.y - body_height // 2,
-            body_width,
-            body_height
-        )
-        pygame.draw.ellipse(surface, self.color, body_rect)
-        
+        body_x = self.x - body_width // 2 + tail_wag * 0.2 * d
+        body_y = self.y - body_height // 2
+
+        # 绘制渐变身体（从上到下渐变）
+        self._draw_gradient_body(surface, body_x, body_y, body_width, body_height, self.color, d)
+
         # 身体高光（让鱼看起来更有立体感）
         highlight_rect = (
             self.x - body_width // 3 + tail_wag * 0.2 * d,
@@ -123,6 +121,9 @@ class Fish:
         )
         highlight_color = tuple(min(255, c + 60) for c in self.color)
         pygame.draw.ellipse(surface, highlight_color, highlight_rect)
+
+        # 鱼鳞纹理效果
+        self._draw_scales(surface, body_x, body_y, body_width, body_height, self.color, d)
 
         # 尾巴 - 带摆动动画
         tail_base_x = self.x - size * 0.7 * d
@@ -176,3 +177,60 @@ class Fish:
     def _darken_color(self, color, amount):
         """使颜色变暗"""
         return tuple(max(0, c - amount) for c in color)
+
+    def _lighten_color(self, color, amount):
+        """使颜色变亮"""
+        return tuple(min(255, c + amount) for c in color)
+
+    def _draw_gradient_body(self, surface, x, y, width, height, color, direction):
+        """绘制渐变色鱼身体"""
+        # 创建渐变表面
+        body_surf = pygame.Surface((int(width), int(height)), pygame.SRCALPHA)
+
+        # 顶部颜色（较亮）
+        top_color = self._lighten_color(color, 30)
+        # 底部颜色（较暗）
+        bottom_color = self._darken_color(color, 20)
+
+        # 垂直渐变
+        for row in range(int(height)):
+            ratio = row / height
+            # 线性插值
+            grad_color = tuple(
+                int(top_color[i] * (1 - ratio) + bottom_color[i] * ratio)
+                for i in range(3)
+            )
+            pygame.draw.line(body_surf, grad_color, (0, row), (width, row))
+
+        # 裁剪成椭圆形状
+        mask = pygame.Surface((int(width), int(height)), pygame.SRCALPHA)
+        pygame.draw.ellipse(mask, (255, 255, 255, 255), (0, 0, width, height))
+        body_surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
+        surface.blit(body_surf, (int(x), int(y)))
+
+    def _draw_scales(self, surface, x, y, width, height, color, direction):
+        """绘制鱼鳞纹理"""
+        scale_color = (*self._lighten_color(color, 40)[:3], 40)  # 半透明的亮色
+        scale_size = min(width, height) * 0.12
+
+        # 只绘制部分鱼鳞，避免太密集
+        rows = 3
+        cols = 4
+        for row in range(rows):
+            for col in range(cols):
+                # 交错排列
+                offset_x = (row % 2) * (scale_size * 0.5)
+                scale_x = x + width * 0.2 + col * scale_size * 1.2 + offset_x
+                scale_y = y + height * 0.25 + row * scale_size * 0.8
+
+                # 确保在身体范围内
+                if scale_x + scale_size < x + width * 0.8 and scale_y + scale_size < y + height * 0.8:
+                    # 绘制单个鱼鳞（小椭圆）
+                    scale_rect = (
+                        int(scale_x),
+                        int(scale_y),
+                        int(scale_size),
+                        int(scale_size * 0.6)
+                    )
+                    pygame.draw.ellipse(surface, scale_color, scale_rect)

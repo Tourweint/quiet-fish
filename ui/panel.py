@@ -14,20 +14,55 @@ class UIPanel:
         self.icon_font = font_manager.get_font(18)
 
     def draw_panel(self, surface, x, y, width, height, title="", border_color=(100, 200, 255)):
-        """绘制面板背景"""
-        # 半透明背景
-        panel_surf = pygame.Surface((width, height), pygame.SRCALPHA)
-        panel_surf.fill((0, 0, 0, 160))
-        surface.blit(panel_surf, (x, y))
+        """绘制毛玻璃效果面板"""
+        # 获取背景区域用于毛玻璃效果
+        bg_area = surface.subsurface((x, y, width, height)).copy()
 
-        # 边框
-        pygame.draw.rect(surface, border_color, (x, y, width, height), 2, border_radius=8)
+        # 毛玻璃效果：先模糊背景
+        blurred = self._blur_surface(bg_area, 3)
+
+        # 绘制模糊后的背景
+        surface.blit(blurred, (x, y))
+
+        # 半透明覆盖层（增强毛玻璃感）
+        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        overlay.fill((30, 50, 80, 120))
+        surface.blit(overlay, (x, y))
+
+        # 内发光效果
+        glow_surf = pygame.Surface((width, height), pygame.SRCALPHA)
+        # 顶部高光
+        pygame.draw.line(glow_surf, (255, 255, 255, 30), (4, 2), (width - 4, 2), 2)
+        # 左侧微光
+        pygame.draw.line(glow_surf, (255, 255, 255, 15), (2, 4), (2, height - 4), 2)
+        surface.blit(glow_surf, (x, y))
+
+        # 边框（带渐变效果）
+        pygame.draw.rect(surface, border_color, (x, y, width, height), 2, border_radius=10)
+        # 内边框
+        inner_color = tuple(min(255, c + 40) for c in border_color)
+        pygame.draw.rect(surface, inner_color, (x + 2, y + 2, width - 4, height - 4), 1, border_radius=8)
 
         # 标题
         if title:
+            # 标题背景条
+            title_bg = pygame.Surface((width - 20, 28), pygame.SRCALPHA)
+            title_bg.fill((*border_color[:3], 40))
+            surface.blit(title_bg, (x + 10, y + 6))
+
             title_surf = self.title_font.render(title, True, border_color)
             title_x = x + (width - title_surf.get_width()) // 2
             surface.blit(title_surf, (title_x, y + 8))
+
+    def _blur_surface(self, surface, radius):
+        """简单的表面模糊处理"""
+        # 缩小再放大实现模糊效果
+        size = surface.get_size()
+        # 缩小
+        small = pygame.transform.smoothscale(surface, (max(1, size[0] // radius), max(1, size[1] // radius)))
+        # 放大回来
+        blurred = pygame.transform.smoothscale(small, size)
+        return blurred
 
     def draw_stats_panel(self, surface, stats_manager, volume, fish_count, is_quiet, pomodoro_state):
         """左侧统计面板"""
