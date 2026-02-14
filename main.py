@@ -17,7 +17,8 @@ from config import (
     ACHIEVEMENTS, FISH_INITIAL_COUNT, FISH_BUBBLE_CHANCE,
     BUBBLE_SPAWN_CHANCE, NIGHT_START_HOUR, NIGHT_END_HOUR,
     RARITY, FISH_RARITY_WEIGHT, BASE_WEIGHT_INTERVAL,
-    VOLUME_ADD_MULTIPLIER, VOLUME_REMOVE_MULTIPLIER
+    VOLUME_ADD_MULTIPLIER, VOLUME_REMOVE_MULTIPLIER,
+    AUDIO_MAX_VOLUME
 )
 
 # 导入模块
@@ -52,6 +53,14 @@ class QuietFishApp:
         # 权重系统：记录每种鱼的累计权重值
         self.fish_weights = {rarity: 0.0 for rarity in RARITY.keys()}
         self.last_weight_update = time.time()
+        # 安静积分：用于计算加鱼的全局进度
+        self.quiet_score = 0
+        # 当前阶段需要的积分
+        self.current_required_score = 10
+        # 本次安静累计时间（秒）
+        self.session_quiet_time = 0
+        # 最大鱼数
+        self.max_fish_limit = 50
 
         # 番茄钟状态
         self.pomodoro = {
@@ -158,6 +167,7 @@ class QuietFishApp:
     def update(self, dt):
         # 获取音量
         volume = self.audio.get_volume()
+        was_quiet = self.is_quiet
         self.is_quiet = volume < SILENCE_THRESHOLD
 
         # 安静时间统计
@@ -171,91 +181,161 @@ class QuietFishApp:
         # ========== 权重系统：基于权重的鱼数量动态调整 ==========
         fish_list = self.fish_list
         stats = self.stats
-        
+
         # 计算时间差
         now = time.time()
         time_delta = now - self.last_weight_update
         self.last_weight_update = now
-        
+
         # 根据声音计算加权/减权速度
-        normalized_volume = min(1.0, volume / 100)  # 归一化到 0-1
-        
+        normalized_volume = min(1.0, volume / AUDIO_MAX_VOLUME)  # 归一化到 0-1
+
         # 安静度：0-1，越安静越接近1
         quietness = 1 - (normalized_volume ** 0.5)
-        
-        # 计算净权重变化速度
-        # 安静时：加权 > 减权，净增加
-        # 吵闹时：减权 > 加权，净减少
-        if quietness > 0.5:
-            # 安静环境：慢慢积累鱼
-            add_speed = quietness * VOLUME_ADD_MULTIPLIER
-            remove_speed = (1 - quietness) * 0.3  # 减权很慢
-        else:
-            # 吵闹环境：快速失去鱼
-            add_speed = quietness * 0.2  # 加权很慢
-            remove_speed = (1 - quietness) * VOLUME_REMOVE_MULTIPLIER
-        
-        net_weight_change = (add_speed - remove_speed) * time_delta * 10  # 缩放因子
-        
-        # 更新每种鱼的权重
-        for rarity in self.fish_weights:
-            rarity_weight = FISH_RARITY_WEIGHT[rarity]
-            # 权重高的鱼变化更快
-            self.fish_weights[rarity] += net_weight_change * rarity_weight
-            # 限制权重范围
-            self.fish_weights[rarity] = max(-5, min(10, self.fish_weights[rarity]))
-        
+
         # 统计当前各稀有度鱼的数量
         rarity_counts = {r: 0 for r in RARITY.keys()}
         for fish in fish_list:
             rarity_counts[fish.rarity] += 1
-        
-        # 计算目标鱼数量（基于安静度）
-        target_total = MIN_FISH + int((MAX_FISH - MIN_FISH) * quietness)
-        
-        # === 加鱼逻辑：权重达到阈值时添加 ===
-        if len(fish_list) < target_total and net_weight_change > 0:
-            for rarity in ["common", "rare", "epic", "legendary", "mythic"]:
-                threshold = BASE_WEIGHT_INTERVAL / FISH_RARITY_WEIGHT[rarity]
-                if self.fish_weights[rarity] >= threshold:
-                    # 权重足够，添加一条该稀有度的鱼
-                    fish = Fish()
-                    # 强制设置稀有度
-                    fish.rarity = rarity
-                    data = RARITY[rarity]
-                    fish.color = random.choice(data["colors"])
-                    fish.size = random.randint(*data["size"])
-                    fish.speed = random.uniform(0.4, 0.7) * data["speed"]
-                    fish.threshold_mult = data["threshold"]
-                    fish.has_glow = data["glow"]
-                    fish.glow_color = data.get("glow_color", (255, 255, 255, 100))
-                    fish.points = data.get("points", 10)
-                    
-                    fish_list.append(fish)
-                    stats.record_fish(fish)
-                    self.fish_weights[rarity] -= threshold  # 消耗权重
-                    
-                    # 偶尔生成气泡
-                    if random.random() < FISH_BUBBLE_CHANCE:
-                        self.bubbles.append(Bubble(
-                            random.randint(*self._bubble_x_range),
-                            HEIGHT, WIDTH
-                        ))
-                    break  # 每帧最多加一条鱼
-        
-        # === 减鱼逻辑：权重为负时优先移除高品质鱼 ===
-        elif len(fish_list) > MIN_FISH and net_weight_change < 0:
-            # 按稀有度从高到低检查（优先移除高品质鱼）
-            for rarity in ["mythic", "legendary", "epic", "rare", "common"]:
-                threshold = -BASE_WEIGHT_INTERVAL / FISH_RARITY_WEIGHT[rarity] * 0.5
-                if self.fish_weights[rarity] <= threshold and rarity_counts[rarity] > 0:
-                    # 找到并移除该稀有度的鱼
-                    for i, fish in enumerate(fish_list):
-                        if fish.rarity == rarity:
-                            fish_list.pop(i)
-                            self.fish_weights[rarity] -= threshold  # 消耗权重（变得更正）
-                            break
-                    break  # 每帧最多减一条鱼
+
+        # 检测从吵闹恢复到安静的状态转换
+        if self.is_quiet and not was_quiet:
+            # 刚刚恢复安静，清零安静积分，但保留本次会话累计时间
+            self.quiet_score = 0
+
+        # 计算净权重变化速度
+        # 安静时：慢慢积累权重
+        # 吵闹时：快速失去鱼，权重清零
+        if self.is_quiet:
+            # 安静环境：慢慢积累权重
+            # 基础积累速度：每秒积累 0.3-0.8 点权重（很慢）
+            base_accumulation = 0.3 + quietness * 0.5
+            net_weight_change = base_accumulation * time_delta
+            # 积累安静积分
+            self.quiet_score += net_weight_change
+            # 累计本次安静时间
+            self.session_quiet_time += time_delta
+        else:
+            # 吵闹环境：清零所有权重和安静积分
+            net_weight_change = 0
+            for rarity in self.fish_weights:
+                self.fish_weights[rarity] = 0
+            self.quiet_score = 0
+
+        # 更新每种鱼的权重（只在安静时积累）
+        if self.is_quiet:
+            for rarity in self.fish_weights:
+                self.fish_weights[rarity] += net_weight_change
+                self.fish_weights[rarity] = min(100, self.fish_weights[rarity])
+
+        # === 基于累计安静时间的品质解锁系统 ===
+        # 30分钟(1800秒)内渐进解锁高品质鱼
+        quiet_minutes = self.session_quiet_time / 60
+
+        # 根据累计安静时间确定可出现的最高品质
+        # 0-2分钟：只有普通
+        # 2-5分钟：解锁稀有
+        # 5-10分钟：解锁史诗
+        # 10-20分钟：解锁传说
+        # 20-30分钟：解锁神话
+        if quiet_minutes < 2:
+            max_unlocked_rarity = "common"
+        elif quiet_minutes < 5:
+            max_unlocked_rarity = "rare"
+        elif quiet_minutes < 10:
+            max_unlocked_rarity = "epic"
+        elif quiet_minutes < 20:
+            max_unlocked_rarity = "legendary"
+        else:
+            max_unlocked_rarity = "mythic"
+
+        # 构建允许的稀有度列表
+        rarity_order = ["common", "rare", "epic", "legendary", "mythic"]
+        max_index = rarity_order.index(max_unlocked_rarity)
+        allowed_rarities = rarity_order[:max_index + 1]
+
+        # 根据累计时间调整加鱼难度（越往后越难加，但品质越高）
+        # 基础需要积分：10点
+        # 每过5分钟增加5点难度
+        difficulty_increase = int(quiet_minutes / 5) * 5
+        self.current_required_score = 10 + difficulty_increase
+
+        # === 加鱼逻辑 ===
+        if len(fish_list) < self.max_fish_limit and self.is_quiet and net_weight_change > 0:
+            # 检查是否达到加鱼条件
+            if self.quiet_score >= self.current_required_score:
+                # 根据累计安静时间调整权重
+                # 时间越长，高品质概率越高
+                time_factor = min(1.0, quiet_minutes / 30)  # 0-1，30分钟达到最大
+
+                # 基础权重
+                base_weights = {
+                    "common": 40,
+                    "rare": 30,
+                    "epic": 20,
+                    "legendary": 8,
+                    "mythic": 2
+                }
+
+                # 根据时间调整权重（时间越长，高品质权重越高）
+                rarity_weights = {}
+                for rarity in allowed_rarities:
+                    if rarity == "common":
+                        # 普通鱼权重随时间降低
+                        rarity_weights[rarity] = base_weights[rarity] * (1 - time_factor * 0.5)
+                    elif rarity == "rare":
+                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 0.3)
+                    elif rarity == "epic":
+                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 0.8)
+                    elif rarity == "legendary":
+                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 2)
+                    elif rarity == "mythic":
+                        rarity_weights[rarity] = base_weights[rarity] * (1 + time_factor * 4)
+
+                # 只选择允许的稀有度
+                available_rarities = [r for r in allowed_rarities]
+                available_weights = [rarity_weights[r] for r in available_rarities]
+
+                # 按权重随机选择
+                chosen_rarity = random.choices(available_rarities, weights=available_weights)[0]
+
+                # 创建指定稀有度的鱼
+                fish = Fish()
+                fish.rarity = chosen_rarity
+                data = RARITY[chosen_rarity]
+                fish.color = random.choice(data["colors"])
+                fish.size = random.randint(*data["size"])
+                fish.speed = random.uniform(0.4, 0.7) * data["speed"]
+                fish.threshold_mult = data["threshold"]
+                fish.has_glow = data["glow"]
+                fish.glow_color = data.get("glow_color", (255, 255, 255, 100))
+                fish.points = data.get("points", 10)
+
+                fish_list.append(fish)
+                stats.record_fish(fish)
+                # 消耗安静积分，清零重新开始积累
+                self.quiet_score = 0
+
+                # occasional bubble
+                if random.random() < FISH_BUBBLE_CHANCE:
+                    self.bubbles.append(Bubble(
+                        random.randint(*self._bubble_x_range),
+                        HEIGHT, WIDTH
+                    ))
+
+        elif not self.is_quiet and len(fish_list) > 0:
+            # 吵闹时：快速失去鱼，从高品质开始
+            remove_chance = (1 - quietness) * dt * 2  # 每秒可能移除2条
+            if random.random() < remove_chance:
+                # 按稀有度从高到低移除
+                for rarity in ["mythic", "legendary", "epic", "rare", "common"]:
+                    if rarity_counts[rarity] > 0:
+                        # 找到并移除该稀有度的鱼
+                        for i, fish in enumerate(fish_list):
+                            if fish.rarity == rarity:
+                                fish_list.pop(i)
+                                break
+                        break  # 每次只移除一条
 
         # 更新鱼
         for fish in fish_list:
@@ -323,7 +403,9 @@ class QuietFishApp:
         volume = self.audio.get_volume()
         self.ui.draw_stats_panel(self.screen, self.stats, volume, len(self.fish_list),
                                  self.is_quiet, self.pomodoro)
-        self.ui.draw_fish_panel(self.screen, self.fish_list)
+        self.ui.draw_fish_panel(self.screen, self.fish_list, self.fish_weights,
+                                self.quiet_score, self.current_required_score,
+                                self.max_fish_limit, self.session_quiet_time)
         self.ui.draw_pomodoro(self.screen, self.pomodoro)
         self.ui.draw_volume_meter(self.screen, volume)
         self.ui.draw_rarity_legend(self.screen)

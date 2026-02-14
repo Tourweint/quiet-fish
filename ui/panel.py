@@ -66,10 +66,10 @@ class UIPanel:
         state_text = self.font.render("安静中" if is_quiet else "太吵!", True, color)
         surface.blit(state_text, (panel_x + 12, start_y + line_height * 5))
 
-    def draw_fish_panel(self, surface, fish_list):
+    def draw_fish_panel(self, surface, fish_list, fish_weights=None, quiet_score=0, required_score=0, max_fish=50, session_time=0):
         """鱼类统计面板"""
         panel_x, panel_y = 15, 270
-        panel_width, panel_height = 220, 160
+        panel_width, panel_height = 220, 240
         self.draw_panel(surface, panel_x, panel_y, panel_width, panel_height, "鱼群", (100, 200, 255))
 
         # 统计各稀有度数量
@@ -77,16 +77,74 @@ class UIPanel:
         for fish in fish_list:
             counts[fish.rarity] += 1
 
-        y_offset = panel_y + 45  # 内容从标题下方开始
-        line_height = 26
+        y_offset = panel_y + 40  # 内容从标题下方开始
+        line_height = 20
         for key, data in RARITY.items():
             count = counts[key]
-            if count > 0:
-                color = data["colors"][0]
-                name = data["name"]
-                text = self.font.render(f"{name}: {count}", True, color)
-                surface.blit(text, (panel_x + 12, y_offset))
-                y_offset += line_height
+            color = data["colors"][0]
+            name = data["name"]
+            text = self.small_font.render(f"{name}: {count}", True, color)
+            surface.blit(text, (panel_x + 12, y_offset))
+            y_offset += line_height
+
+        # 显示累计安静时间
+        y_offset += 3
+        minutes = int(session_time / 60)
+        seconds = int(session_time % 60)
+        time_text = self.small_font.render(f"安静: {minutes}分{seconds}秒", True, (255, 255, 200))
+        surface.blit(time_text, (panel_x + 12, y_offset))
+        y_offset += 22
+
+        # 显示已解锁品质
+        quiet_minutes = session_time / 60
+        if quiet_minutes < 2:
+            unlocked = "普通"
+        elif quiet_minutes < 5:
+            unlocked = "普通/稀有"
+        elif quiet_minutes < 10:
+            unlocked = "普通/稀有/史诗"
+        elif quiet_minutes < 20:
+            unlocked = "普通/稀有/史诗/传说"
+        else:
+            unlocked = "全部解锁"
+        unlock_text = self.small_font.render(f"解锁: {unlocked}", True, (200, 255, 200))
+        surface.blit(unlock_text, (panel_x + 12, y_offset))
+        y_offset += 24
+
+        # 显示加鱼进度条
+        # 进度条背景
+        bar_width = panel_width - 24
+        bar_height = 12
+        bar_x = panel_x + 12
+        bar_y = y_offset
+
+        # 进度条边框
+        pygame.draw.rect(surface, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height), 1)
+
+        # 进度填充
+        if required_score > 0:
+            progress = min(1.0, quiet_score / required_score)
+            fill_width = int(bar_width * progress)
+            if fill_width > 0:
+                # 根据进度改变颜色
+                if progress < 0.3:
+                    color = (255, 100, 100)  # 红色
+                elif progress < 0.7:
+                    color = (255, 255, 100)  # 黄色
+                else:
+                    color = (100, 255, 100)  # 绿色
+                pygame.draw.rect(surface, color, (bar_x, bar_y, fill_width, bar_height))
+
+        # 进度文字
+        progress_text = self.small_font.render(f"{quiet_score:.1f}/{required_score}", True, (255, 255, 255))
+        text_x = bar_x + (bar_width - progress_text.get_width()) // 2
+        surface.blit(progress_text, (text_x, bar_y - 1))
+
+        # 鱼数量
+        y_offset += bar_height + 6
+        total_fish = len(fish_list)
+        fish_count_text = self.font.render(f"鱼: {total_fish}/{max_fish}", True, (200, 255, 255))
+        surface.blit(fish_count_text, (panel_x + 12, y_offset))
 
     def draw_pomodoro(self, surface, pomodoro_state):
         """番茄钟面板"""

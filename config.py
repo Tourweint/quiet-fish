@@ -1,6 +1,6 @@
-"""
+﻿"""
 安静养鱼 - 自习神器
-模块化重构版
+模块化重构版本
 """
 
 # ============ 窗口配置 ============
@@ -14,7 +14,7 @@ POMODORO_WORK_MINUTES = 25
 POMODORO_BREAK_MINUTES = 5
 
 # ============ 声音配置 ============
-SILENCE_THRESHOLD = 500
+SILENCE_THRESHOLD = 40
 MAX_FISH = 25
 MIN_FISH = 8  # 保底8条鱼，无论声音多大都会存在
 FISH_FLEE_SPEED = 2.5
@@ -23,7 +23,7 @@ FISH_FLEE_SPEED = 2.5
 AUDIO_SAMPLE_RATE = 44100
 AUDIO_BUFFER_SIZE = 1024
 AUDIO_SMOOTH_FRAMES = 30
-AUDIO_RMS_DIVISOR = 50  # 用于将 RMS 转换为 0-100 的音量
+AUDIO_RMS_DIVISOR = 30  # 用于将 RMS 转换为 0-100 的音量
 AUDIO_MAX_VOLUME = 100
 
 # ============ 鱼的行为配置 ============
@@ -107,7 +107,7 @@ for key, data in RARITY.items():
         RARITY_WEIGHTS.append(key)
 
 # 初始鱼数量配置
-FISH_INITIAL_COUNT = 3  # 初始只有3条鱼，寥寥无几
+FISH_INITIAL_COUNT = 3  # 初始只有3条鱼，该死无疑
 
 # ============ 鱼权重系统配置 ============
 # 每种鱼的权重值（越高越容易获得/失去）
@@ -119,25 +119,25 @@ FISH_RARITY_WEIGHT = {
     "mythic": 1,      # 神话鱼：权重1，最难获得
 }
 
-# 基础时间间隔（秒）- 用于计算实际加减鱼时间
+# 基础时间间隔（秒）用于计算实际加减鱼时间
 BASE_WEIGHT_INTERVAL = 10  # 基础周期10秒
 
 # 声音影响系数
-VOLUME_ADD_MULTIPLIER = 1.0   # 安静时加权倍率
-VOLUME_REMOVE_MULTIPLIER = 2.0  # 吵闹时减权倍率（减得更快）
+VOLUME_ADD_MULTIPLIER = 1.0   # 安静时加权倍数
+VOLUME_REMOVE_MULTIPLIER = 2.0  # 吵闹时减权倍数（减得更快）
 
 # ============ 成就定义 ============
 ACHIEVEMENTS = {
-    "first_fish": {"name": "初次见面", "desc": "获得第一条鱼", "icon": "🐟"},
-    "rare_hunter": {"name": "稀有猎人", "desc": "获得第一条稀有鱼", "icon": "💎"},
-    "collector_10": {"name": "鱼类收藏家", "desc": "同时拥有10条鱼", "icon": "📗"},
-    "collector_20": {"name": "水族馆馆长", "desc": "同时拥有20条鱼", "icon": "📚"},
+    "first_fish": {"name": "首次见面", "desc": "获得第一条鱼", "icon": "🐟"},
+    "rare_hunter": {"name": "稀有猎人", "desc": "获得第一条稀有鱼", "icon": "🎣"},
+    "collector_10": {"name": "鱼类收藏家", "desc": "同时拥有10条鱼", "icon": "🐠"},
+    "collector_20": {"name": "水族馆馆长", "desc": "同时拥有20条鱼", "icon": "🐡"},
     "legendary_sight": {"name": "见证传说", "desc": "获得第一条传说鱼", "icon": "👑"},
-    "quiet_master": {"name": "安静大师", "desc": "累计安静1小时", "icon": "🕊️"},
-    "focus_warrior": {"name": "专注战士", "desc": "完成5个番茄钟", "icon": "⚔️"},
-    "night_owl": {"name": "夜猫子", "desc": "深夜时段（23-6点）使用", "icon": "🦉"},
+    "quiet_master": {"name": "安静大师", "desc": "累计安静1小时", "icon": "🧘‍♂️"},
+    "focus_warrior": {"name": "专注战士", "desc": "完成5个番茄钟", "icon": "⏱️"},
+    "night_owl": {"name": "夜猫子", "desc": "深夜时段（23-6点）使用", "icon": "🌙"},
     "streak_3": {"name": "三天打鱼", "desc": "连续3天使用", "icon": "📅"},
-    "total_fish_100": {"name": "百鱼斩", "desc": "累计获得100条鱼", "icon": "🔪"},
+    "total_fish_100": {"name": "百鱼斩", "desc": "累计获得100条鱼", "icon": "🐋"},
 }
 
 # ============ 等级定义 ============

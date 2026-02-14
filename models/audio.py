@@ -4,6 +4,8 @@ import math
 import struct
 from collections import deque
 
+from config import AUDIO_RMS_DIVISOR, AUDIO_MAX_VOLUME, AUDIO_BUFFER_SIZE, AUDIO_SAMPLE_RATE
+
 
 class AudioMonitor:
     def __init__(self, smooth_frames=30):
@@ -22,10 +24,10 @@ class AudioMonitor:
             self.stream = self.pa.open(
                 format=pyaudio.paInt16,
                 channels=1,
-                rate=44100,
+                rate=AUDIO_SAMPLE_RATE,
                 input=True,
                 input_device_index=device_index,
-                frames_per_buffer=1024
+                frames_per_buffer=AUDIO_BUFFER_SIZE
             )
             print("[AudioMonitor] 音频流初始化成功")
         except Exception as e:
@@ -41,7 +43,7 @@ class AudioMonitor:
             return 0
             
         try:
-            data = self.stream.read(1024, exception_on_overflow=False)
+            data = self.stream.read(AUDIO_BUFFER_SIZE, exception_on_overflow=False)
             
             # 将字节数据转换为16位有符号整数数组
             # 每个样本是2个字节（16位）
@@ -58,7 +60,7 @@ class AudioMonitor:
             
             # 将 RMS 映射到 0-100 范围
             # 调整除数使音量条更敏感（值越小越敏感）
-            volume = min(100, int(rms / 30))
+            volume = min(AUDIO_MAX_VOLUME, int(rms / AUDIO_RMS_DIVISOR))
             
             self.volume_history.append(volume)
             self.current_volume = sum(self.volume_history) / len(self.volume_history)
